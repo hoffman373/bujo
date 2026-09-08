@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+
+# generated output
+*.aux
+*.log
+*.out
+*.toc
+*.pdf
+
+# editor artifacts
+*~
+\#*\#
+.\#*
+*.swp

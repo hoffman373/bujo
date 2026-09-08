@@ -1,0 +1,59 @@
+// A worked example. Everything before the first collection is metadata.
+title: Field Notes
+subtitle: Volume III
+author: J. Doe
+date: 2026
+papersize: a5paper
+margin: 14mm
+
+index:
+
+key:
+
+future 2026-10 .. 2027-03:
+  2026-10:
+    o Conference in Berlin, 12th–15th
+    . Renew passport
+  2026-11:
+    o Mom's birthday, 3rd #family
+    . Draft the annual review
+  2027-01:
+    ! Sabbatical — start planning [[Reading List]]
+
+month 2026-09 "Ship the compiler":
+  *. Cut the 0.1 release #work
+    x Lexer and parser
+    x LaTeX backend
+    . Markdown backend
+    > Write the manual -> 2026-10
+  . Replace the pump seal @workshop
+  < Renew passport -> 2026-10
+  o 22nd — autumn equinox
+  - The RP2350 board arrived; the second core is the interesting part
+
+day 2026-09-05 "and it rained":
+  *. Ship the compiler #work
+    x Write the lexer
+    x Write the parser
+    ~ Hand-roll a PEG grammar
+    > Finish the manual -> 2026-09-08
+  ?. Look into how Ryder Carroll handles threading
+  o 09:30–10:00 Standup with @team
+  o 19:00 Dinner with @sam
+  - Nesting works because indentation is the whole grammar;
+    a line with no bullet just continues the one above it
+  ! Idea: emit an ICS file too, so events land in a calendar #ideas
+
+day 2026-09-06:
+  . Groceries @town
+  x Long run, 14km #health
+  - Legs held up better than last week
+
+collection "Reading List":
+  Fiction:
+    x The Cartographer's Regret — Nell Auberon
+    . Vellum and Ash — J. M. Rooke
+  Technical:
+    . The Little Typer
+    ~ Yet another book on microservices
+    - See also the notes in [[2026-09-05]]
