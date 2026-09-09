@@ -7,7 +7,7 @@ You write rapid-logging notation more or less the way you'd write it on paper:
 
 ```
 title: Field Notes
-author: Your Name
+author: J. Doe
 
 index:
 key:
@@ -147,7 +147,9 @@ notebook is ruled; it is a single PDF tiling pattern rather than a few thousand
 circles, and `dot-spacing`, `dot-size` and `dot-color` metadata retune it. Every
 glyph is a `\newcommand` in the preamble — redefine `\bujoTask`, `\bujoDone`
 and friends to change the notation across the whole journal without touching
-the generated body. A Monthly Log gets the date column of a paper spread, with
+the generated body. The body itself is written in bullet macros —
+`\task[priority]{...}`, `\migrated[to=2026-10]{...}`, `\event[at=09:30]{...}` —
+so it can be read and edited by hand rather than being a write-only blob. A Monthly Log gets the date column of a paper spread, with
 pinned bullets on their own day's row; a Future Log draws every month in its
 range, including the empty ones, because that is half of what a future log is
 for.
@@ -203,7 +205,7 @@ tests/
 .venv/bin/pip install -e '.[dev]' && .venv/bin/pytest
 ```
 
-157 tests, covering the grammar, both text backends, the CLI, and — when
+160 tests, covering the grammar, both text backends, the CLI, and — when
 `pdflatex` is present — that the generated LaTeX really compiles, and that a
 weekly notebook comes out half-Letter with a page count that folds, and that
 `--booklet` really does put two of those pages on every sheet.

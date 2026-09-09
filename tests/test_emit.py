@@ -50,7 +50,7 @@ def test_latex_is_standalone_by_default(doc):
 
 def test_latex_fragment_has_no_preamble(doc):
     tex = emit(doc, "latex", standalone=False)
-    assert "\\documentclass" not in tex and "\\section*{Index}" in tex
+    assert "\\documentclass" not in tex and r"\bujocollection{Index}" in tex
 
 
 def test_latex_escapes_special_characters(doc):
@@ -61,11 +61,11 @@ def test_latex_escapes_special_characters(doc):
 
 def test_latex_markers_and_signifiers(doc):
     tex = emit(doc, "latex")
-    assert r"\item[\bujoSig{\bujoPriority}\bujoTask]" in tex
-    assert r"\item[\bujoDone]" in tex
-    assert r"\sout{Dropped idea}" in tex
-    assert r"\bujoTime{09:30}" in tex
-    assert r"\bujoTarget{2026-10}" in tex
+    assert r"\task[priority]{Ship it \bujoTag{work}}" in tex
+    assert r"\done{Sub task}" in tex
+    assert r"\dropped{Dropped idea}" in tex
+    assert r"\event[at=09:30]{Standup with \bujoContext{team}}" in tex
+    assert r"\migrated[to=2026-10]{Manual}" in tex
 
 
 def test_latex_refs_become_hyperlinks(doc):
@@ -80,7 +80,7 @@ def test_latex_unresolved_ref_falls_back_to_italics():
 def test_latex_future_log_draws_empty_months(doc):
     tex = emit(doc, "latex")
     for month in ("October 2026", "November 2026", "December 2026"):
-        assert f"\\subsection*{{{month}}}" in tex
+        assert f"\\bujogroup{{{month}}}" in tex
     assert "(nothing scheduled)" in tex
 
 
@@ -266,9 +266,10 @@ def test_mono_metadata_enables_it():
 def test_repeated_collections_get_distinct_labels():
     src = "index:\nday 2026-09-05:\n  . written up\nday 2026-09-05:\n  . again\n"
     tex = emit(parse(src), "latex")
-    assert r"\label{bujo:day-2026-09-05}" in tex
-    assert r"\label{bujo:day-2026-09-05-2}" in tex
-    assert r"\pageref{bujo:day-2026-09-05-2}" in tex
+    assert r"\bujocollection{2026-09-05 · Saturday}{day-2026-09-05}" in tex
+    assert r"\bujocollection{2026-09-05 · Saturday}{day-2026-09-05-2}" in tex
+    # ...and the index points at the second one, not twice at the first
+    assert r"\bujoindexentry{2026-09-05 · Saturday}{day-2026-09-05-2}" in tex
 
 
 def test_repeated_headings_get_github_style_anchors():
@@ -290,11 +291,11 @@ month 2026-09:
 
 def test_the_date_column_carries_its_pinned_entries():
     tex = emit(parse(PINNED), "latex", calendar=True)
-    assert r"09 & Wed & \bujoEvent~\bujoTime{15:45}Doctor" in tex
+    assert r"09 & Wed & \event*[at=15:45]{Doctor}" in tex
     # two on one day stack inside the cell
-    assert r"\newline \bujoTask~Bring the referral" in tex
+    assert r"\newline \task*{Bring the referral}" in tex
     # ...and the row does not repeat the date the column already shows
-    assert r"\bujoDay{09}" not in tex
+    assert "day=09" not in tex
 
 
 def test_a_month_uses_longtable_so_its_rows_can_break():
@@ -309,7 +310,7 @@ def test_unpinned_entries_fall_below_the_date_column():
 
 def test_without_a_date_column_a_pin_prints_on_the_bullet():
     tex = emit(parse(PINNED), "latex", calendar=False)
-    assert r"\bujoDay{09}~\bujoTime{15:45}Doctor" in tex
+    assert r"\event[day=09,at=15:45]{Doctor}" in tex
     assert r"\begin{longtable}" not in tex
 
 
@@ -317,3 +318,42 @@ def test_markdown_prints_the_pin_since_it_has_no_date_column():
     md = emit(parse(PINNED), "markdown")
     assert "- ○ **09** **15:45** Doctor" in md
     assert "- [ ] **09** Bring the referral" in md
+
+
+# -- the hand-writable macro layer ------------------------------------------
+
+def test_the_body_is_written_in_bullet_macros(doc):
+    """The point of the layer: the body should be editable without knowing how
+    a marker is assembled."""
+    tex = emit(doc, "latex", standalone=False)
+    assert r"\item[" not in tex
+    assert r"\section*" not in tex and r"\subsection*" not in tex
+
+
+def test_starred_bullets_render_without_a_list_item():
+    tex = emit(parse(PINNED), "latex", calendar=True)
+    assert r"\event*[at=15:45]{Doctor}" in tex
+
+
+@pytest.mark.skipif(shutil.which("pdflatex") is None, reason="pdflatex not installed")
+def test_an_option_left_out_prints_nothing(tmp_path):
+    """A regression test for a bug the markup alone could not show.
+
+    The option macros are compared against \\@empty to decide whether to print
+    a time or a migration arrow. \\newcommand makes a macro \\long, and \\ifx
+    compares that prefix too, so a \\long empty macro never tested equal and
+    every bullet printed a bare arrow. It only appeared once compiled.
+    """
+    src = "day 2026-09-05:\n  . A plain task\n  - A plain note\n"
+    (tmp_path / "p.tex").write_text(emit(parse(src), "latex"), encoding="utf-8")
+    proc = subprocess.run(
+        ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "p.tex"],
+        cwd=tmp_path, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stdout[-3000:]
+
+    text = subprocess.run(
+        ["pdftotext", str(tmp_path / "p.pdf"), "-"], capture_output=True, text=True
+    ).stdout
+    assert "A plain task" in text
+    assert "→" not in text and "→" not in text

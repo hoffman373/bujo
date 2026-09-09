@@ -6,7 +6,7 @@ nesting mechanism — the same rule a paper journal follows.
 
 ```
 title: Field Notes            <- metadata
-author: Your Name
+author: J. Doe
 
 day 2026-09-05:               <- a collection header
   *. Ship the compiler #work  <- a bullet
@@ -248,3 +248,46 @@ the same cause: a half turn is also a left-right swap.
 
 Without `--booklet` the pages come out one per sheet in reading order, which is
 what you want if your printer's own *Booklet* mode is doing the imposition.
+
+## The generated LaTeX
+
+The body is written in bullet macros rather than raw list items, so a compiled
+journal can be read, edited, or written from scratch by hand:
+
+```latex
+\bujocollection{2026-09-05 · Saturday}{day-2026-09-05}
+\begin{bujoitems}
+  \task[priority]{Ship the compiler \bujoTag{work}}
+  \begin{bujoitems}
+    \done{Write the lexer}
+    \dropped{Hand-roll a PEG grammar}
+    \migrated[to=2026-09-08]{Finish the manual}
+  \end{bujoitems}
+  \event[at=09:30]{Standup with \bujoContext{team}}
+  \note[idea]{Emit an ICS file too}
+\end{bujoitems}
+```
+
+One macro per bullet kind — `\task`, `\done`, `\migrated`, `\scheduled`,
+`\dropped`, `\event`, `\note` — each taking optional keys:
+
+| Key | Meaning |
+| --- | --- |
+| `priority`, `idea`, `explore` | Signifiers, to the left of the marker |
+| `to=` | Where a migrated or scheduled task went |
+| `at=` | An event's time |
+| `day=` | Day of the month, in a Monthly Log |
+
+`\dropped` strikes its own text through, so the notation cannot get out of step
+with the meaning. A starred form (`\task*`) renders without a list item, which
+is what the monthly date column needs to put a bullet inside a table cell.
+
+Everything else is one macro too: `\bujocollection{title}{label}` for a
+heading, `\bujogroup{title}` for a sub-section, `\bujoindexentry{title}{label}`
+for a line of the index. The markers themselves stay `\newcommand`s —
+`\bujoTask`, `\bujoDone` and friends — so redefining one changes the notation
+everywhere without touching a single bullet.
+
+Editing generated LaTeX is an escape hatch, not a workflow: the next
+`bujo compile` overwrites it. Changes that should last belong in the `.bujo`
+source, or in your own preamble redefining the marker macros.

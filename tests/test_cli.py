@@ -91,7 +91,9 @@ def test_weekly_layout_reorders_and_adds_writing_pages(journal, capsys):
     out = capsys.readouterr().out
     assert "paperwidth=5.5in,paperheight=8.5in" in out
     assert out.count(r"\bujoDotThisPage") == 7 + 2  # 7 pages, the macro, the padding
-    assert out.index(r"\section*{Index}") < out.index(r"\section*{2026-09-07 · Monday}")
+    assert out.index(r"\bujocollection{Index}") < out.index(
+        r"\bujocollection{2026-09-07 · Monday}"
+    )
 
 
 def test_weekly_no_dots_leaves_the_writing_pages_plain(journal, capsys):

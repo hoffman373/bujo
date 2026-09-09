@@ -1,4 +1,5 @@
 import datetime as dt
+import re
 import shutil
 import subprocess
 
@@ -124,6 +125,21 @@ def test_margin_from_the_file_is_kept():
 
 # -- rendering --------------------------------------------------------------
 
+def _collection(tex, label):
+    """Where the collection with this label opens.
+
+    Not just a search for the label: the generated index mentions it too, and
+    earlier in the file.
+    """
+    m = re.search(r"\\bujocollection\{[^}]*\}\{" + re.escape(label) + r"\}", tex)
+    assert m, f"no collection labelled {label}"
+    return m.start()
+
+
+def _blank_pages(notebook):
+    return [c for c in notebook.collections if getattr(c, "blank", False)]
+
+
 def _weekly_tex(notebook, **options):
     return emit(notebook, "latex", page_breaks=True, signature=True, **options)
 
@@ -141,22 +157,24 @@ def test_only_blank_pages_get_dots(notebook):
 
     lines = _body(notebook).splitlines()
     dotted = [lines[i + 1] for i, line in enumerate(lines) if line == r"\bujoDotThisPage"]
-    blanks = {c.title for c in notebook.collections if getattr(c, "blank", False)}
-    assert set(dotted) == {rf"\section*{{{title}}}" for title in blanks}
+    # compare titles, not labels: a writing page for a day already written up
+    # gets a numbered label so the two do not collide
+    titles = {line.split("}{")[0].removeprefix(r"\bujocollection{") for line in dotted}
+    assert titles == {c.title for c in _blank_pages(notebook)}
     assert len(dotted) == 7
 
 
 def test_blank_pages_start_on_a_fresh_page_after_the_dots(notebook):
     # The order matters: \bujoDotThisPage attaches to the next page shipped.
     assert (
-        "\\clearpage\n\\bujoDotThisPage\n\\section*{2026-09-08 · Tuesday}"
+        "\\clearpage\n\\bujoDotThisPage\n\\bujocollection{2026-09-08 · Tuesday}"
         in _weekly_tex(notebook)
     )
 
 
 def test_blank_pages_are_empty_below_the_date(notebook):
     tex = _weekly_tex(notebook)
-    after = tex[tex.index(r"\label{bujo:day-2026-09-13}") :]
+    after = tex[_collection(tex, "day-2026-09-13") :]
     assert after.split("\n")[1] == r"\vspace*{\fill}"
     assert "bujoitems" not in after
 
@@ -289,6 +307,7 @@ def test_the_monthly_spread_keeps_its_copy():
 def test_a_writing_page_with_fixtures_still_gets_its_dots_and_space():
     nb = weekly(parse(PINNED_SRC), WEDNESDAY)
     tex = emit(nb, "latex", page_breaks=True, signature=True)
-    block = tex[tex.index(r"\label{bujo:day-2026-09-09}") :]
-    assert r"\bujoDotThisPage" in tex[: tex.index(r"\label{bujo:day-2026-09-09}")]
+    start = _collection(tex, "day-2026-09-09")
+    block = tex[start:]
+    assert r"\bujoDotThisPage" in tex[:start]
     assert "Doctor" in block.split(r"\vspace*{\fill}")[0]

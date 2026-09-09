@@ -7,6 +7,8 @@ redefines them instead of editing the generated body.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ..model import (
     MONTHS,
     Collection,
@@ -44,18 +46,21 @@ _ESCAPES = {
     ">": r"\textgreater{}",
 }
 
+#: Bullet macro per task state; events and notes have one each.
 _STATE_MACRO = {
-    State.OPEN: r"\bujoTask",
-    State.DONE: r"\bujoDone",
-    State.MIGRATED: r"\bujoMigrated",
-    State.SCHEDULED: r"\bujoScheduled",
-    State.CANCELLED: r"\bujoCancelled",
+    State.OPEN: "task",
+    State.DONE: "done",
+    State.MIGRATED: "migrated",
+    State.SCHEDULED: "scheduled",
+    State.CANCELLED: "dropped",
 }
 
-_SIGNIFIER_MACRO = {
-    Signifier.PRIORITY: r"\bujoPriority",
-    Signifier.INSPIRATION: r"\bujoInspiration",
-    Signifier.EXPLORE: r"\bujoExplore",
+#: Signifiers are named options rather than punctuation, so a hand-written
+#: `\task[priority]{...}` says what it means.
+_SIGNIFIER_KEY = {
+    Signifier.PRIORITY: "priority",
+    Signifier.INSPIRATION: "idea",
+    Signifier.EXPLORE: "explore",
 }
 
 #: Colours, and what is left of them when the target is a mono laser printer.
@@ -136,6 +141,70 @@ PREAMBLE = r"""\documentclass[%(fontsize)s]{article}
 
 \setlength{\parindent}{0pt}
 \color{bujoink}
+
+%%%% ---- writing bullets by hand ---------------------------------------------
+%%%% Every bullet is \<kind>[<options>]{<text>}, so this file can be edited, or
+%%%% written from scratch, without knowing how the markers are put together:
+%%%%
+%%%%   \task{Ship the compiler}          \event[at=09:30]{Standup}
+%%%%   \done{Write the lexer}            \note{Indentation is the grammar}
+%%%%   \dropped{Hand-roll a PEG}         \task[priority]{Cut the release}
+%%%%   \migrated[to=2026-10]{Manual}     \scheduled[to=2027-01]{Passport}
+%%%%
+%%%% Options: priority, idea, explore; to=<where a task went>, at=<a time>,
+%%%% day=<day of the month>. Starred forms (\task*) render without a list item,
+%%%% for a table cell.
+\usepackage{keyval}
+\makeatletter
+%%%% \def, not \newcommand: \newcommand makes a macro \long, and \ifx compares
+%%%% that prefix too, so a \long empty macro never tests equal to \@empty.
+\def\bujo@sig{}
+\def\bujo@to{}
+\def\bujo@at{}
+\def\bujo@day{}
+\def\bujo@marker{}
+\def\bujo@strike{}
+\newcommand{\bujo@addsig}[1]{%%
+  \expandafter\def\expandafter\bujo@sig\expandafter{\bujo@sig#1}}
+\define@key{bujo}{priority}[]{\bujo@addsig{\bujoPriority}}
+\define@key{bujo}{idea}[]{\bujo@addsig{\bujoInspiration}}
+\define@key{bujo}{explore}[]{\bujo@addsig{\bujoExplore}}
+\define@key{bujo}{to}{\def\bujo@to{#1}}
+\define@key{bujo}{at}{\def\bujo@at{#1}}
+\define@key{bujo}{day}{\def\bujo@day{#1}}
+\newcommand{\bujo@setup}[1]{%%
+  \def\bujo@sig{}\def\bujo@to{}\def\bujo@at{}\def\bujo@day{}%%
+  \setkeys{bujo}{#1}}
+\newcommand{\bujo@label}{%%
+  \ifx\bujo@sig\@empty\else\bujoSig{\bujo@sig}\fi\bujo@marker}
+\newcommand{\bujo@body}[1]{%%
+  \ifx\bujo@day\@empty\else\bujoDay{\bujo@day}~\fi%%
+  \ifx\bujo@at\@empty\else\bujoTime{\bujo@at}\fi%%
+  \bujo@strike{#1}%%
+  \ifx\bujo@to\@empty\else~\bujoTarget{\bujo@to}\fi}
+\newcommand{\bujo@item@}[2][]{\bujo@setup{#1}\item[\bujo@label]\bujo@body{#2}}
+\newcommand{\bujo@inline@}[2][]{\bujo@setup{#1}\bujo@label~\bujo@body{#2}}
+\newcommand{\bujo@item}[2]{\def\bujo@marker{#1}\def\bujo@strike{#2}\bujo@item@}
+\newcommand{\bujo@inline}[2]{\def\bujo@marker{#1}\def\bujo@strike{#2}\bujo@inline@}
+\newcommand{\bujo@kind}[2]{%% #1 marker, #2 how the text is wrapped
+  \@ifstar{\bujo@inline{#1}{#2}}{\bujo@item{#1}{#2}}}
+\newcommand{\task}{\bujo@kind{\bujoTask}{\@firstofone}}
+\newcommand{\done}{\bujo@kind{\bujoDone}{\@firstofone}}
+\newcommand{\migrated}{\bujo@kind{\bujoMigrated}{\@firstofone}}
+\newcommand{\scheduled}{\bujo@kind{\bujoScheduled}{\@firstofone}}
+\newcommand{\dropped}{\bujo@kind{\bujoCancelled}{\sout}}
+\newcommand{\event}{\bujo@kind{\bujoEvent}{\@firstofone}}
+\newcommand{\note}{\bujo@kind{\bujoNote}{\@firstofone}}
+\makeatother
+
+%%%% A collection heading, and a titled sub-section inside one.
+\newcommand{\bujocollection}[2]{%%
+  \section*{#1}\addcontentsline{toc}{section}{#1}\label{bujo:#2}}
+\newcommand{\bujogroup}[1]{\subsection*{#1}}
+
+%%%% One line of the generated index: a title, a leader, and its page.
+\newcommand{\bujoindexentry}[2]{%%
+  \item[\bujoNote] \hyperref[bujo:#2]{#1}\dotfill\pageref{bujo:#2}}
 """
 
 DOT_GRID = r"""
@@ -321,10 +390,8 @@ class _Latex:
             self.out.append(r"\bujoDotThisPage")
         self.first = False
 
-        self.out.append(rf"\section*{{{esc(collection.title)}}}")
         self.out.append(
-            rf"\addcontentsline{{toc}}{{section}}{{{esc(collection.title)}}}"
-            rf"\label{{bujo:{self.labels[id(collection)]}}}"
+            rf"\bujocollection{{{esc(collection.title)}}}{{{self.labels[id(collection)]}}}"
         )
 
         if blank:
@@ -352,7 +419,7 @@ class _Latex:
         for item in items:
             if isinstance(item, Group):
                 self._flush(pending)
-                self.out.append(rf"\subsection*{{{esc(item.title)}}}")
+                self.out.append(rf"\bujogroup{{{esc(item.title)}}}")
                 self._entries(item.entries)
             else:
                 pending.append(item)
@@ -363,45 +430,43 @@ class _Latex:
             self._entries(list(pending))
             pending.clear()
 
-    def _entries(self, entries: list[Entry]) -> None:
+    def _entries(self, entries: list[Entry], depth: int = 0) -> None:
         if not entries:
             return
-        self.out.append(r"\begin{bujoitems}")
+        pad = "  " * depth
+        self.out.append(rf"{pad}\begin{{bujoitems}}")
         for entry in entries:
-            self.out.append(rf"  \item[{self._label(entry)}] {self._body(entry)}")
-            self._entries(entry.children)
-        self.out.append(r"\end{bujoitems}")
+            self.out.append(f"{pad}  {self._bullet(entry)}")
+            self._entries(entry.children, depth + 1)
+        self.out.append(rf"{pad}\end{{bujoitems}}")
 
     # -- one bullet --------------------------------------------------------
 
-    def _label(self, entry: Entry) -> str:
-        if entry.kind is Kind.TASK:
-            marker = _STATE_MACRO[entry.state or State.OPEN]
-        elif entry.kind is Kind.EVENT:
-            marker = r"\bujoEvent"
-        else:
-            marker = r"\bujoNote"
-        if entry.signifiers:
-            sig = "".join(_SIGNIFIER_MACRO[s] for s in entry.signifiers)
-            marker = rf"\bujoSig{{{sig}}}{marker}"
-        return marker
+    def _bullet(self, entry: Entry, *, inline: bool = False) -> str:
+        """One bullet, as the hand-writable macro for its kind.
 
-    def _body(self, entry: Entry, *, pinned_shown: bool = False) -> str:
-        """Render a bullet's text.
-
-        ``pinned_shown`` says the date column has already named the day, so the
-        bullet should not repeat it.
+        ``inline`` picks the starred form, which renders without a list item --
+        what a date-column cell needs.
         """
-        text = "".join(self._span(s) for s in entry.spans).strip()
-        if entry.state is State.CANCELLED:
-            text = rf"\sout{{{text}}}"
+        if entry.kind is Kind.TASK:
+            name = _STATE_MACRO[entry.state or State.OPEN]
+        elif entry.kind is Kind.EVENT:
+            name = "event"
+        else:
+            name = "note"
+
+        options = [_SIGNIFIER_KEY[s] for s in entry.signifiers]
+        if entry.day:
+            options.append(f"day={entry.day:02d}")
         if entry.time:
-            text = rf"\bujoTime{{{esc(entry.time)}}}{text}"
+            options.append(f"at={esc(entry.time)}")
         if entry.target:
-            text = rf"{text}~\bujoTarget{{{esc(entry.target)}}}"
-        if entry.day and not pinned_shown:
-            text = rf"\bujoDay{{{entry.day:02d}}}~{text}"
-        return text
+            options.append(f"to={esc(entry.target)}")
+
+        text = "".join(self._span(s) for s in entry.spans).strip()
+        star = "*" if inline else ""
+        keys = f"[{','.join(options)}]" if options else ""
+        return rf"\{name}{star}{keys}{{{text}}}"
 
     def _span(self, span: Span) -> str:
         match span:
@@ -428,8 +493,7 @@ class _Latex:
                 continue
             label = self.labels[id(collection)]
             self.out.append(
-                rf"  \item[\bujoNote] \hyperref[bujo:{label}]"
-                rf"{{{esc(collection.title)}}}\dotfill\pageref{{bujo:{label}}}"
+                rf"  \bujoindexentry{{{esc(collection.title)}}}{{{label}}}"
             )
         self.out.append(r"\end{bujoitems}")
 
@@ -463,14 +527,14 @@ class _Latex:
             heading = f"{MONTHS[month - 1]} {year}"
             keys = (f"{year}-{month:02d}", heading.casefold(), MONTHS[month - 1].casefold())
             entries = next((by_month.pop(k) for k in keys if k in by_month), [])
-            self.out.append(rf"\subsection*{{{esc(heading)}}}")
+            self.out.append(rf"\bujogroup{{{esc(heading)}}}")
             if entries:
                 self._entries(entries)
             else:
                 self.out.append(r"{\color{bujomuted}\small\itshape (nothing scheduled)}")
 
         for title, entries in by_month.items():  # groups outside the declared range
-            self.out.append(rf"\subsection*{{{esc(title)}}}")
+            self.out.append(rf"\bujogroup{{{esc(title)}}}")
             self._entries(entries)
 
     def _calendar(self, collection: MonthlyLog) -> None:
@@ -505,7 +569,8 @@ class _Latex:
         )
         for day, name in month_days(collection.year, collection.month):
             cell = r"\newline ".join(
-                rf"{self._label(entry)}~{self._body(entry, pinned_shown=True)}"
+                # the row already names the day, so the pin is not repeated
+                self._bullet(replace(entry, day=None), inline=True)
                 for entry in pinned.get(day, [])
             )
             number, weekday = f"{day:02d}", name
